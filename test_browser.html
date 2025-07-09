@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCP Server API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #005a8b; }
+        .output { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 3px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+        input[type="text"] { padding: 8px; margin: 5px; width: 300px; }
+        .error { background: #ffe6e6; border: 1px solid #ff9999; }
+        .success { background: #e6ffe6; border: 1px solid #99ff99; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔒 MCP Server API Test</h1>
+    
+    <div class="warning">
+        <strong>⚠️ Common Issues:</strong><br>
+        • Make sure the server is running: <code>python start_server.py --api-keys YOUR_API_KEY</code><br>
+        • Try different URLs: localhost, 127.0.0.1, or your actual IP<br>
+        • Check browser console (F12) for detailed error messages<br>
+        • Some browsers block localhost requests - try with --disable-web-security or use 127.0.0.1
+    </div>
+    
+    <div class="section">
+        <h3>🔑 Configuration</h3>
+        <label>API Key:</label>
+        <input type="text" id="apiKey" placeholder="Enter your API key" value="LKzvbSII_mpk5xyHArCOLO0kNT_N-3EVkGUX0JK-QU4">
+        <br>
+        <label>Server URL:</label>
+        <input type="text" id="serverUrl" placeholder="Server URL" value="http://127.0.0.1:8080">
+        <br>
+        <button onclick="testConnectivity()">🔍 Test Connectivity</button>
+        <div>
+            <small>Try these URLs if the default doesn't work:</small><br>
+            <button onclick="setUrl('http://localhost:8080')">localhost:8080</button>
+            <button onclick="setUrl('http://127.0.0.1:8080')">127.0.0.1:8080</button>
+            <button onclick="setUrl('http://192.168.254.95:8080')">192.168.254.95:8080</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>🏥 Health Check</h3>
+        <button onclick="checkHealth()">Check Server Health</button>
+        <div id="healthOutput" class="output"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔧 List Tools</h3>
+        <button onclick="listTools()">List Available Tools</button>
+        <div id="toolsOutput" class="output"></div>
+    </div>
+
+    <div class="section">
+        <h3>📡 Echo Tool</h3>
+        <input type="text" id="echoMessage" placeholder="Enter message to echo" value="Hello from browser!">
+        <button onclick="executeEcho()">Execute Echo</button>
+        <div id="echoOutput" class="output"></div>
+    </div>
+
+    <div class="section">
+        <h3>💻 System Info Tool</h3>
+        <button onclick="getSystemInfo()">Get System Information</button>
+        <div id="systemInfoOutput" class="output"></div>
+    </div>
+
+    <script>
+        function getApiKey() {
+            return document.getElementById('apiKey').value;
+        }
+
+        function getServerUrl() {
+            return document.getElementById('serverUrl').value;
+        }
+
+        function setUrl(url) {
+            document.getElementById('serverUrl').value = url;
+            log(`🔄 URL changed to: ${url}`);
+        }
+
+        function log(message) {
+            const output = document.getElementById('healthOutput') || document.getElementById('toolsOutput') || document.getElementById('echoOutput') || document.getElementById('systemInfoOutput');
+            if (output) {
+                output.textContent = message + '\n' + (output.textContent || '');
+                output.className = 'output';
+            }
+            console.log(message);
+        }
+
+        function logSuccess(message, elementId) {
+            const output = document.getElementById(elementId);
+            if (output) {
+                output.textContent = message;
+                output.className = 'output success';
+            }
+            console.log('✅', message);
+        }
+
+        function logError(message, elementId) {
+            const output = document.getElementById(elementId);
+            if (output) {
+                output.textContent = message;
+                output.className = 'output error';
+            }
+            console.error('❌', message);
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                console.log('Making request to:', url, 'with options:', options);
+                
+                // Add timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+                
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                return { success: true, data };
+                
+            } catch (error) {
+                console.error('Request failed:', error);
+                
+                if (error.name === 'AbortError') {
+                    return { success: false, error: 'Request timeout (10s). Server may be down or slow.' };
+                } else if (error.message.includes('Failed to fetch')) {
+                    return { 
+                        success: false, 
+                        error: `Network error: ${error.message}. Possible causes:\n• Server not running\n• CORS blocked\n• Wrong URL\n• Firewall blocking\n\nTry:\n• Check server is running\n• Try different URL (127.0.0.1 vs localhost)\n• Check browser console for details` 
+                    };
+                } else {
+                    return { success: false, error: error.message };
+                }
+            }
+        }
+
+        async function testConnectivity() {
+            const url = getServerUrl();
+            log(`🔍 Testing connectivity to: ${url}`);
+            
+            const result = await makeRequest(`${url}/health`);
+            
+            if (result.success) {
+                logSuccess(`✅ Connection successful!\nServer: ${JSON.stringify(result.data, null, 2)}`, 'healthOutput');
+            } else {
+                logError(`❌ Connection failed!\n${result.error}`, 'healthOutput');
+            }
+        }
+
+        async function checkHealth() {
+            const result = await makeRequest(`${getServerUrl()}/health`);
+            
+            if (result.success) {
+                logSuccess(JSON.stringify(result.data, null, 2), 'healthOutput');
+            } else {
+                logError(`Error: ${result.error}`, 'healthOutput');
+            }
+        }
+
+        async function listTools() {
+            const result = await makeRequest(`${getServerUrl()}/api/tools`, {
+                headers: {
+                    'Authorization': `Bearer ${getApiKey()}`
+                }
+            });
+            
+            if (result.success) {
+                logSuccess(JSON.stringify(result.data, null, 2), 'toolsOutput');
+            } else {
+                logError(`Error: ${result.error}`, 'toolsOutput');
+            }
+        }
+
+        async function executeEcho() {
+            const message = document.getElementById('echoMessage').value;
+            const mcpRequest = {
+                jsonrpc: "2.0",
+                method: "tools/call",
+                params: {
+                    name: "echo",
+                    arguments: {
+                        message: message
+                    }
+                },
+                id: 1
+            };
+
+            const result = await makeRequest(`${getServerUrl()}/mcp`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${getApiKey()}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(mcpRequest)
+            });
+
+            if (result.success) {
+                logSuccess(JSON.stringify(result.data, null, 2), 'echoOutput');
+            } else {
+                logError(`Error: ${result.error}`, 'echoOutput');
+            }
+        }
+
+        async function getSystemInfo() {
+            const mcpRequest = {
+                jsonrpc: "2.0",
+                method: "tools/call",
+                params: {
+                    name: "system_info",
+                    arguments: {'detail_level': 'detailed'}
+                },
+                id: 2
+            };
+
+            const result = await makeRequest(`${getServerUrl()}/mcp`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${getApiKey()}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(mcpRequest)
+            });
+
+            if (result.success) {
+                logSuccess(JSON.stringify(result.data, null, 2), 'systemInfoOutput');
+            } else {
+                logError(`Error: ${result.error}`, 'systemInfoOutput');
+            }
+        }
+
+        // Test on page load
+        window.onload = function() {
+            console.log('Page loaded, testing connectivity...');
+            setTimeout(testConnectivity, 1000);
+        };
+    </script>
+</body>
+</html>

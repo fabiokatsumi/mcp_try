@@ -1,0 +1,25 @@
+# Production Docker Compose for Dokploy
+version: '3'
+
+services:
+  secure-mcp-server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.production
+    restart: always
+    ports:
+      - "8443:8443"
+    environment:
+      - PORT=8443
+      - MCP_API_KEYS=${MCP_API_KEYS}
+      - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-INFO}
+      - MCP_ENABLE_MONITORING=${MCP_ENABLE_MONITORING:-true}
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - /tmp:/tmp  # For temporary files if needed

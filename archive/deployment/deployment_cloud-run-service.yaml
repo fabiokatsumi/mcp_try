@@ -1,0 +1,27 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: secure-mcp-server
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cpu-throttling: "false"
+    spec:
+      containerConcurrency: 100
+      containers:
+      - image: gcr.io/PROJECT_ID/secure-mcp-server
+        ports:
+        - containerPort: 8443
+        env:
+        - name: MCP_API_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: mcp-api-keys
+              key: keys
+        resources:
+          limits:
+            cpu: "1"
+            memory: "512Mi"

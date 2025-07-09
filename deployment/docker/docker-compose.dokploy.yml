@@ -1,0 +1,77 @@
+# Docker Compose for Local Testing (Dokploy Environment Simulation)
+version: '3.8'
+
+services:
+  secure-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: secure-mcp-server-local
+    ports:
+      - "8443:8443"
+    environment:
+      - MCP_API_KEYS=${MCP_API_KEYS:-demo-key-1,demo-key-2}
+      - PORT=8443
+      - MCP_LOG_LEVEL=INFO
+      - MCP_ENABLE_MONITORING=true
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount logs directory for debugging
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mcp-network
+
+  # Reverse proxy (simulates Dokploy's Traefik)
+  reverse-proxy:
+    image: traefik:v2.10
+    container_name: mcp-reverse-proxy
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.api.service=api@internal"
+    networks:
+      - mcp-network
+
+  # Monitoring stack (simulates Dokploy monitoring)
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: mcp-monitoring
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local

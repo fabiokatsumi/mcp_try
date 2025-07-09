@@ -1,0 +1,1 @@
+python secure_server.py --port $PORT --env-keys
